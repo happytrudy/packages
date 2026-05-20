@@ -1,0 +1,42 @@
+name: Sync Applications
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 每天北京时间 08:00 自动运行
+  workflow_dispatch:       # 支持在 GitHub 页面手动点击按钮触发
+
+jobs:
+  sync-files:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout local repository
+        uses: actions/checkout@v4
+
+      - name: Clone immortalwrt/luci sparsely
+        run: |
+          mkdir temp-source && cd temp-source
+          git init
+          git remote add origin https://github.com
+          git config core.sparseCheckout true
+          echo "applications/" >> .git/info/sparse-checkout
+          git pull origin master
+
+      - name: Sync contents to root
+        run: |
+          # 清理根目录下除了 .git 和 .github 以外的旧文件
+          find . -maxdepth 1 ! -name '.' ! -name '..' ! -name '.git' ! -name '.github' ! -name 'temp-source' -exec rm -rf {} +
+          # 将 applications 内的所有子文件夹移动到当前仓库根目录
+          cp -r temp-source/applications/* .
+          rm -rf temp-source
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@://github.com"
+          git add -A
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "chore: sync applications from immortalwrt/luci"
+            git push
+          else
+            echo "No changes detected."
+          fi
