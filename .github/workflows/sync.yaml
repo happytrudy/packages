@@ -3,48 +3,47 @@ name: Sync Applications
 on:
   schedule:
     - cron: '0 0 * * *'  # 每天北京时间 08:00 自动运行
-  workflow_dispatch:     # 支持手动点击运行
+  workflow_dispatch:     # 支持手动点击按钮随时运行
 
 jobs:
   sync-files:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: 检出你自己的空仓库（main分支）
+      # Step 1: 检出你自己的 happytrudy/packages 仓库
       - name: Checkout local repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # Step 2: 优雅地使用官方稀疏检出，只下载上游的 applications 文件夹
-      # 这种方式绝对不会触发 "repository not found" 权限错误
+      # Step 2: 仅下载上游 immortalwrt/luci 的 master 分支下的 applications 文件夹
       - name: Checkout upstream repository sparsely
         uses: actions/checkout@v4
         with:
           repository: 'immortalwrt/luci'
           ref: 'master'
-          path: 'temp-source'
+          path: 'upstream-temp'
           sparse-checkout: 'applications'
           sparse-checkout-cone-mode: false
 
-      # Step 3: 把 applications 目录下的所有内容同步平铺到你仓库的根目录
+      # Step 3: 清理旧文件并将 applications 文件夹下的内容平铺移动到根目录
       - name: Sync contents to root
         run: |
-          # 1. 删除你仓库根目录下旧的包（保留 .git 和 .github 目录）
-          find . -maxdepth 1 ! -name '.' ! -name '..' ! -name '.git' ! -name '.github' ! -name 'temp-source' -exec rm -rf {} +
+          # 删除根目录下旧的文件（保留 .git 和 .github 目录，避免删除自身）
+          find . -maxdepth 1 ! -name '.' ! -name '..' ! -name '.git' ! -name '.github' ! -name 'upstream-temp' -exec rm -rf {} +
           
-          # 2. 将 temp-source/applications/* 移动到根目录
-          cp -r temp-source/applications/* .
+          # 将上游 applications 目录下的所有子内容直接复制到当前根目录
+          cp -r upstream-temp/applications/* .
           
-          # 3. 彻底删除临时下载的文件夹
-          rm -rf temp-source
+          # 删除临时文件夹
+          rm -rf upstream-temp
 
-      # Step 4: 提交并推送到你的 main 分支
+      # Step 4: 提交变动并推送到你的 main 分支
       - name: Commit and Push
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          # 确保本地分支对齐 main
+          # 确保本地位于 main 分支
           git checkout -B main
           
           git add -A
