@@ -3,7 +3,7 @@ name: Sync Applications
 on:
   schedule:
     - cron: '0 0 * * *'  # 每天北京时间 08:00 自动运行
-  workflow_dispatch:       # 支持在 GitHub 页面手动点击按钮触发
+  workflow_dispatch:     # 支持手动点击运行
 
 jobs:
   sync-files:
@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: Checkout local repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 获取完整历史（即使为空也不报错）
 
       - name: Clone immortalwrt/luci sparsely
         run: |
@@ -23,20 +25,29 @@ jobs:
 
       - name: Sync contents to root
         run: |
-          # 清理根目录下除了 .git 和 .github 以外的旧文件
+          # 清理根目录旧文件（保留 .git 和 .github 目录）
           find . -maxdepth 1 ! -name '.' ! -name '..' ! -name '.git' ! -name '.github' ! -name 'temp-source' -exec rm -rf {} +
-          # 将 applications 内的所有子文件夹移动到当前仓库根目录
+          # 拷贝目标文件夹下的内容（例如 luci-app-xxx）到根目录
           cp -r temp-source/applications/* .
           rm -rf temp-source
 
       - name: Commit and Push
         run: |
           git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@://github.com"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          # 检查当前分支名，空仓库可能没有分支，默认指定为 main
+          CURRENT_BRANCH=$(git branch --show-current)
+          if [ -z "$CURRENT_BRANCH" ]; then
+            CURRENT_BRANCH="main"
+            git checkout -b $CURRENT_BRANCH
+          fi
+
           git add -A
+          
           if ! git diff-index --quiet HEAD; then
             git commit -m "chore: sync applications from immortalwrt/luci"
-            git push
+            git push origin $CURRENT_BRANCH
           else
             echo "No changes detected."
           fi
